@@ -1,0 +1,206 @@
+name: Build and Upload to COPR
+
+on:
+  schedule:
+    # Check for new whisper.cpp releases daily at 6 AM UTC
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    inputs:
+      force_build:
+        description: 'Force a build even if no new release'
+        required: false
+        default: 'false'
+        type: boolean
+  push:
+    branches:
+      - main
+    paths:
+      - 'whisper-cpp.spec'
+      - '.github/workflows/build.yml'
+      - 'build.sh'
+
+concurrency:
+  group: whispercpp-build
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+env:
+  COPR_PROJECT: 'whisper-cpp-vulkan'
+  WHISPER_REPO: 'ggml-org/whisper.cpp'
+  # Space-separated list of chroots to build for.
+  # Add new stable releases here as they branch from rawhide.
+  CHROOTS: "fedora-43-x86_64 fedora-44-x86_64 fedora-rawhide-x86_64"
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.check.outputs.tag }}
+      should_build: ${{ steps.check.outputs.should_build }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check for new whisper.cpp release
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Get latest release tag via gh CLI (available on ubuntu-latest runners)
+          TAG=$(gh api repos/${{ env.WHISPER_REPO }}/releases/latest --jq '.tag_name')
+
+          if [ -z "${TAG}" ] || [ "${TAG}" = "null" ]; then
+            echo "Error: Could not get latest release tag"
+            exit 1
+          fi
+
+          echo "Latest release: ${TAG}"
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+
+          # Read last built tag from state file
+          LAST_TAG=""
+          if [ -f state/last_version ]; then
+            LAST_TAG=$(cat state/last_version | tr -d '[:space:]')
+          fi
+          echo "Last built: ${LAST_TAG:-<none>}"
+
+          if [ "${{ github.event.inputs.force_build }}" = "true" ]; then
+            echo "should_build=true" >> $GITHUB_OUTPUT
+            echo "Force build requested"
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            echo "should_build=true" >> $GITHUB_OUTPUT
+            echo "Push event - rebuilding with updated spec"
+          elif [ "${TAG}" = "${LAST_TAG}" ]; then
+            echo "should_build=false" >> $GITHUB_OUTPUT
+            echo "Version ${TAG} already built, skipping"
+          else
+            echo "should_build=true" >> $GITHUB_OUTPUT
+            echo "New version ${TAG} - will build"
+          fi
+
+  build:
+    needs: check-version
+    if: needs.check-version.outputs.should_build == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    container:
+      image: fedora:43
+    steps:
+      - name: Install dependencies
+        run: |
+          dnf install -y \
+            git \
+            gh \
+            rpm-build \
+            rpmdevtools \
+            python3-copr \
+            copr-cli \
+            wget
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup RPM build tree
+        run: rpmdev-setuptree
+
+      - name: Download whisper.cpp source tarball
+        run: |
+          TAG="${{ needs.check-version.outputs.tag }}"
+          wget "https://github.com/${{ env.WHISPER_REPO }}/archive/refs/tags/${TAG}.tar.gz" \
+            -O ~/rpmbuild/SOURCES/${TAG}.tar.gz
+          echo "Downloaded: ${TAG}.tar.gz ($(du -sh ~/rpmbuild/SOURCES/${TAG}.tar.gz | cut -f1))"
+
+      - name: Copy and version spec file
+        run: |
+          cp $GITHUB_WORKSPACE/whisper-cpp.spec ~/rpmbuild/SPECS/
+          # Hardcode the version into the spec so it survives COPR's SRPM rebuild
+          sed -i "s/^Version:.*/Version:        ${{ needs.check-version.outputs.tag }}/" \
+            ~/rpmbuild/SPECS/whisper-cpp.spec
+
+      - name: Build SRPM
+        run: |
+          rpmbuild -bs ~/rpmbuild/SPECS/whisper-cpp.spec
+
+          SRPM=$(ls -1t ~/rpmbuild/SRPMS/whisper-cpp-*.src.rpm | head -1)
+          echo "Built SRPM: ${SRPM}"
+          cp "${SRPM}" $GITHUB_WORKSPACE/
+          echo "BUILT_SRPM=$(basename ${SRPM})" >> $GITHUB_ENV
+
+      - name: Upload SRPM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: whisper-cpp-srpm
+          path: "*.src.rpm"
+          retention-days: 7
+
+      - name: Publish SRPM to GitHub Releases
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd $GITHUB_WORKSPACE
+          git config --global --add safe.directory $GITHUB_WORKSPACE
+          TAG="${{ needs.check-version.outputs.tag }}"
+          SRPM="$GITHUB_WORKSPACE/${{ env.BUILT_SRPM }}"
+          # Replace any existing release for this tag so re-runs work cleanly
+          gh release delete "${TAG}" --yes 2>/dev/null || true
+          gh release create "${TAG}" \
+            --target main \
+            --title "whisper-cpp ${TAG}" \
+            --notes "Source RPM for whisper-cpp ${TAG}" \
+            "${SRPM}"
+          # Construct the download URL directly — deterministic, no JSON parsing
+          SRPM_URL="https://github.com/${{ github.repository }}/releases/download/${TAG}/${{ env.BUILT_SRPM }}"
+          echo "SRPM_URL=${SRPM_URL}" >> $GITHUB_ENV
+          echo "SRPM published to: ${SRPM_URL}"
+
+      - name: Setup COPR credentials
+        if: github.event_name != 'pull_request'
+        run: |
+          mkdir -p ~/.config
+          printf '%s\n' \
+            '[copr-cli]' \
+            'login = ${{ secrets.COPR_LOGIN }}' \
+            'username = ${{ secrets.COPR_USERNAME }}' \
+            'token = ${{ secrets.COPR_TOKEN }}' \
+            'copr_url = https://copr.fedorainfracloud.org' \
+            > ~/.config/copr
+
+      - name: Upload to COPR
+        if: github.event_name != 'pull_request'
+        run: |
+          # Use buildurl so COPR's dist-git importer fetches from GitHub Releases
+          # (reliable CDN) rather than from COPR's own storage, which consistently
+          # drops large file downloads with IncompleteRead errors.
+          CHROOT_ARGS=()
+          for chroot in ${{ env.CHROOTS }}; do
+            CHROOT_ARGS+=(--chroot "${chroot}")
+          done
+          copr-cli build ${{ env.COPR_PROJECT }} "${{ env.SRPM_URL }}" \
+            "${CHROOT_ARGS[@]}" \
+            --timeout 7200 \
+            --nowait
+
+      - name: Update state file
+        if: github.event_name != 'pull_request'
+        run: |
+          TAG="${{ needs.check-version.outputs.tag }}"
+          mkdir -p $GITHUB_WORKSPACE/state
+          echo "${TAG}" > $GITHUB_WORKSPACE/state/last_version
+
+      - name: Commit state update
+        if: github.event_name != 'pull_request'
+        run: |
+          cd $GITHUB_WORKSPACE
+          git config --global --add safe.directory $GITHUB_WORKSPACE
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add state/last_version
+          if git diff --cached --quiet; then
+            echo "No state change to commit"
+          else
+            git commit -m "state: update to ${{ needs.check-version.outputs.tag }}"
+            git push
+          fi

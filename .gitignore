@@ -1,0 +1,15 @@
+# Build artifacts
+build/
+*.src.rpm
+*.rpm
+
+# Editor files
+*~
+*.swp
+.vscode/
+.idea/
+.aider*
+
+# OS files
+.DS_Store
+Thumbs.db
