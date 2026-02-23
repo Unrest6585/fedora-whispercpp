@@ -1,5 +1,7 @@
 # Version is set to the upstream release tag (e.g. v1.8.3) by the build workflow.
 # For local builds, run build.sh which patches this line automatically.
+%define version_no_v %(echo %{version} | sed 's/^v//')
+
 Name:           whisper-cpp
 Version:        v0
 Release:        1%{?dist}
@@ -32,7 +34,7 @@ Requires:       vulkan-loader
 Shared libraries for whisper.cpp, including the Vulkan compute backend.
 
 %prep
-%autosetup -n whisper.cpp-%{version}
+%autosetup -n whisper.cpp-%{version_no_v}
 
 %build
 %cmake \
