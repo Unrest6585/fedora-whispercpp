@@ -52,6 +52,7 @@ Shared libraries for whisper.cpp, including the Vulkan compute backend.
 rm -rf %{buildroot}%{_includedir}
 rm -rf %{buildroot}%{_libdir}/cmake
 rm -rf %{buildroot}%{_libdir}/pkgconfig
+rm -rf %{buildroot}/usr/lib/pkgconfig
 find %{buildroot}%{_libdir} -name '*.so' -delete
 
 # Remove test binaries not needed at runtime
