@@ -17,7 +17,10 @@ BuildRequires:  ninja-build
 BuildRequires:  vulkan-devel
 BuildRequires:  glslc
 BuildRequires:  libcurl-devel
-BuildRequires:  ffmpeg-free-devel
+BuildRequires:  libavcodec-free-devel
+BuildRequires:  libavformat-free-devel
+BuildRequires:  libavutil-free-devel
+BuildRequires:  libswresample-free-devel
 
 Requires:       %{name}-libs%{?_isa} = %{version}-%{release}
 Requires:       vulkan-loader
@@ -50,6 +53,9 @@ sed -i 's|"models/ggml-base.en.bin"|[]() -> std::string { auto x = getenv("XDG_D
 
 # Patch upstream download script to default to XDG model directory
 sed -i 's|*/bin) default_download_path="$PWD"|*/bin) default_download_path="${XDG_DATA_HOME:-$HOME/.local/share}/whisper-cpp/models"|' \
+  models/download-ggml-model.sh
+# Ensure model directory is created before cd
+sed -i '/^cd "$models_path"/i mkdir -p "$models_path"' \
   models/download-ggml-model.sh
 
 %build
