@@ -17,6 +17,7 @@ BuildRequires:  ninja-build
 BuildRequires:  vulkan-devel
 BuildRequires:  glslc
 BuildRequires:  libcurl-devel
+BuildRequires:  ffmpeg-free-devel
 
 Requires:       %{name}-libs%{?_isa} = %{version}-%{release}
 Requires:       vulkan-loader
@@ -38,11 +39,25 @@ Installed to a private directory to avoid conflicts with other ggml consumers.
 %prep
 %autosetup -n whisper.cpp-%{version_no_v}
 
+# Patch default model path: look in XDG_DATA_HOME first, then ~/.local/share
+# Uses a C++ lambda so it works in any translation unit without extra headers
+sed -i 's|"models/ggml-base.en.bin"|[]() -> std::string { auto x = getenv("XDG_DATA_HOME"); if (x \&\& x[0]) return std::string(x) + "/whisper-cpp/models/ggml-base.en.bin"; auto h = getenv("HOME"); if (h \&\& h[0]) return std::string(h) + "/.local/share/whisper-cpp/models/ggml-base.en.bin"; return "models/ggml-base.en.bin"; }().c_str()|g' \
+  examples/cli/cli.cpp \
+  examples/server/server.cpp \
+  examples/bench/bench.cpp \
+  examples/quantize/quantize.cpp \
+  examples/vad-speech-segments/speech.cpp
+
+# Patch upstream download script to default to XDG model directory
+sed -i 's|*/bin) default_download_path="$PWD"|*/bin) default_download_path="${XDG_DATA_HOME:-$HOME/.local/share}/whisper-cpp/models"|' \
+  models/download-ggml-model.sh
+
 %build
 %cmake \
     -DGGML_NATIVE=OFF \
     -DGGML_VULKAN=ON \
     -DWHISPER_CURL=ON \
+    -DWHISPER_FFMPEG=ON \
     -DBUILD_SHARED_LIBS=ON \
     -DCMAKE_INSTALL_RPATH=%{_privlibdir} \
     -G Ninja
@@ -50,6 +65,10 @@ Installed to a private directory to avoid conflicts with other ggml consumers.
 
 %install
 %cmake_install
+
+# Install upstream model download script
+install -Dpm 0755 models/download-ggml-model.sh \
+  %{buildroot}%{_bindir}/whisper-cpp-download-model
 
 # Move all shared libraries to private directory to avoid conflicts with
 # other ggml consumers (e.g. llama-cpp-libs) that ship the same libggml*.so
