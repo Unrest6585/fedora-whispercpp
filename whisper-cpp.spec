@@ -51,6 +51,14 @@ sed -i 's|"models/ggml-base.en.bin"|[]() -> std::string { auto x = getenv("XDG_D
   examples/quantize/quantize.cpp \
   examples/vad-speech-segments/speech.cpp
 
+# Patch -m flag to resolve short model names (e.g. -m large-v3) to XDG path
+# If the model path has no '/', treat it as a model name and resolve to
+# ~/.local/share/whisper-cpp/models/ggml-<name>.bin
+sed -i '/params.model.*= ARGV_NEXT/a\
+        if (params.model.find("/") == std::string::npos) { auto x = getenv("XDG_DATA_HOME"); auto h = getenv("HOME"); std::string base = (x && x[0]) ? std::string(x) : (h && h[0]) ? std::string(h) + "/.local/share" : "."; params.model = base + "/whisper-cpp/models/ggml-" + params.model + ".bin"; }' \
+  examples/cli/cli.cpp \
+  examples/server/server.cpp
+
 # Patch upstream download script to default to XDG model directory
 sed -i 's|*/bin) default_download_path="$PWD"|*/bin) default_download_path="${XDG_DATA_HOME:-$HOME/.local/share}/whisper-cpp/models"|' \
   models/download-ggml-model.sh
