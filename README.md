@@ -22,6 +22,27 @@ For the shared libraries only (e.g. for embedding):
 sudo dnf install whisper-cpp-libs
 ```
 
+## Usage
+
+Download a model first:
+
+```bash
+whisper-cpp-download-model base.en
+```
+
+Available models: `tiny`, `tiny.en`, `base`, `base.en`, `small`, `small.en`, `medium`, `medium.en`, `large-v1`, `large-v2`, `large-v3`, `large-v3-turbo`
+
+Models are saved to `~/.local/share/whisper-cpp/models/` (respects `XDG_DATA_HOME`).
+
+Transcribe an audio or video file:
+
+```bash
+whisper-cli -m base.en file.wav
+whisper-cli -m large-v3 file.mp4
+```
+
+The `-m` flag accepts either a short model name (e.g. `large-v3`) or a full path. Short names resolve to `~/.local/share/whisper-cpp/models/ggml-<name>.bin` automatically. FFmpeg support is built in, so MP4, Opus, AAC, and other formats work directly.
+
 ## GitHub Actions Setup
 
 ### 1. Create a COPR project
