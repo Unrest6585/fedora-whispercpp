@@ -115,8 +115,10 @@ jobs:
       - name: Copy and version spec file
         run: |
           cp $GITHUB_WORKSPACE/whisper-cpp.spec ~/rpmbuild/SPECS/
-          # Hardcode the version into the spec so it survives COPR's SRPM rebuild
-          sed -i "s/^Version:.*/Version:        ${{ needs.check-version.outputs.tag }}/" \
+          # Strip 'v' prefix from tag (v1.8.3 → 1.8.3) to match Fedora versioning
+          VERSION="${{ needs.check-version.outputs.tag }}"
+          VERSION="${VERSION#v}"
+          sed -i "s/^Version:.*/Version:        ${VERSION}/" \
             ~/rpmbuild/SPECS/whisper-cpp.spec
 
       - name: Build SRPM

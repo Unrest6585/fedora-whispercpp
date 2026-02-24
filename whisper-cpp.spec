@@ -1,15 +1,14 @@
-# Version is set to the upstream release tag (e.g. v1.8.3) by the build workflow.
+# Version is set to the upstream release version (e.g. 1.8.3) by the build workflow.
 # For local builds, run build.sh which patches this line automatically.
-%define version_no_v %(echo %{version} | sed 's/^v//')
 %define _privlibdir %{_libdir}/%{name}
 
 Name:           whisper-cpp
-Version:        v0
+Version:        0
 Release:        1%{?dist}
 Summary:        Speech-to-text inference engine in C/C++ with Vulkan GPU acceleration
 License:        MIT
 URL:            https://github.com/ggml-org/whisper.cpp
-Source0:        https://github.com/ggml-org/whisper.cpp/archive/refs/tags/%{version}.tar.gz
+Source0:        https://github.com/ggml-org/whisper.cpp/archive/refs/tags/v%{version}.tar.gz
 
 BuildRequires:  cmake >= 3.14
 BuildRequires:  gcc-c++
@@ -40,7 +39,7 @@ Shared libraries for whisper.cpp, including the Vulkan compute backend.
 Installed to a private directory to avoid conflicts with other ggml consumers.
 
 %prep
-%autosetup -n whisper.cpp-%{version_no_v}
+%autosetup -n whisper.cpp-%{version}
 
 # Patch default model path: look in XDG_DATA_HOME first, then ~/.local/share
 # Uses a C++ lambda so it works in any translation unit without extra headers

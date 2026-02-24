@@ -27,7 +27,9 @@ wget "https://github.com/ggml-org/whisper.cpp/archive/refs/tags/${TAG}.tar.gz" \
 
 echo "==> Copying and versioning spec file..."
 cp "${SCRIPT_DIR}/whisper-cpp.spec" ~/rpmbuild/SPECS/
-sed -i "s/^Version:.*/Version:        ${TAG}/" ~/rpmbuild/SPECS/whisper-cpp.spec
+# Strip 'v' prefix from tag (v1.8.3 → 1.8.3) to match Fedora versioning
+VERSION="${TAG#v}"
+sed -i "s/^Version:.*/Version:        ${VERSION}/" ~/rpmbuild/SPECS/whisper-cpp.spec
 
 echo "==> Building SRPM..."
 rpmbuild -bs ~/rpmbuild/SPECS/whisper-cpp.spec
