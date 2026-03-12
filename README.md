@@ -12,7 +12,7 @@ Automated builds of [whisper.cpp](https://github.com/ggml-org/whisper.cpp) for F
 ## Installation
 
 ```bash
-sudo dnf copr enable YOUR_USERNAME/whisper-cpp-vulkan
+sudo dnf copr enable sneed/whisper-cpp-vulkan
 sudo dnf install whisper-cpp
 ```
 
@@ -83,7 +83,7 @@ Add these to your repository (Settings → Secrets and variables → Actions):
 sudo dnf install rpm-build rpmdevtools wget python3
 
 # Clone this repository
-git clone https://github.com/YOUR_USERNAME/fedora-whispercpp.git
+git clone https://github.com/sneed/fedora-whispercpp.git
 cd fedora-whispercpp
 
 # Run the build script
