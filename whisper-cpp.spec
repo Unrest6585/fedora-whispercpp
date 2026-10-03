@@ -15,6 +15,7 @@ BuildRequires:  gcc-c++
 BuildRequires:  ninja-build
 BuildRequires:  vulkan-devel
 BuildRequires:  glslc
+BuildRequires:  spirv-headers-devel
 BuildRequires:  libcurl-devel
 BuildRequires:  libavcodec-free-devel
 BuildRequires:  libavformat-free-devel
@@ -108,6 +109,7 @@ rm -f %{buildroot}%{_bindir}/test-*
 %license LICENSE
 %doc README.md
 %{_bindir}/whisper-*
+%{_bindir}/parakeet-*
 
 %files libs
 %license LICENSE
